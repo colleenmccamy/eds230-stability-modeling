@@ -5,7 +5,7 @@ date: "2023-06-04"
 output: html_document
 ---
 
-```{r}
+```{r, include=FALSE}
 
 # loading libraries
 library(tidyverse)
@@ -13,11 +13,12 @@ library(sensitivity)
 library(tidyverse)
 library(deSolve)
 library(ggpubr)
+library(ggplot2)
 
 ```
 
 
-```{r}
+```{r, warning=FALSE}
 
 # sourcing in the function
 path = "/Users/colleenmccamy/Documents/MEDS/classes/spring/eds-230-modeling/assignments/eds230-stability-modeling"
@@ -25,7 +26,11 @@ source(paste0(path, "/R/lotvmodK_hunt.R"))
 
 ```
 
-```{r}
+```{r, warning=FALSE}
+
+### --------------------- 
+### running the hunting model
+### ---------------------
 
 # setting parameters
 rprey <- 0.95
@@ -37,17 +42,16 @@ pred_min <- 1000
 hunt <- 0.5
 
 # creating it to be a dataframe
-pars = tibble(rprey=rprey, alpha=alpha, eff=eff, pmort=pmort, K=K, prey_min = prey_min, hunt = hunt)
+pars = tibble(rprey=rprey, alpha=alpha, eff=eff, pmort=pmort, K=K, pred_min = pred_min, hunt = hunt)
 
 # setting timescale
-months = seq(from=1, to=300, by  = 1)
-
+months = seq(from=1, to=300, by=1)
 
 # establishing population at time 0
 pop0 <- c(prey=2000, pred=200)
 
 # integrating the model
-res <- ode(func=lotvmodK_hunt, y=pop, times=months, parms=pars)
+res <- ode(func=lotvmodK_hunt, y=pop0, times=months, parms=pars)
 
 ### --------------------- 
 ### sensitivity analysis 
@@ -96,22 +100,44 @@ for (i in 1:nrow(values)) {
   res <- ode(func = lotvmodK_hunt, y = pop0, times = months, parms = pars)
 
 
-  key <- paste0("hunt_", hunt, "_preymin_", prey_min)
+  key <- paste0(hunt, ",", pred_min)
   results[[key]] <- as.data.frame(res)
 }
 
 # storing the results as a dataframe
 results_df <- do.call(rbind, results)
 
+# data wrangling
+results_df <- results_df |> 
+  rownames_to_column(var = "index")
+results_df <- separate(results_df, index, into = c("hunt", "min_pred"), 
+                       sep = ",", remove = FALSE)
+results_df <- results_df |> 
+  select(-index)
+
 ```
 
+### Defining Stability
+```{r, warning=FALSE}
 
+# defining stability
+stability_metric <- mapply(function(prey, pred) prey >= (3 * pred), results_df$prey, results_df$pred)
 
-Explore how different hunting levels and different minimum prey populations (before hunting is allowed) are likely to effect the stability of the populations of both predator and prey. Use this exploration to recommend a hunting target that will be sustainable (e.g leave you with a stable prey and predator population)
+# applying stability metric
+results_df <- results_df |> 
+  mutate(stable = ifelse(stability_metric, "stable", "unstable"))
 
-You can assume the following rprey=0.95, alpha=0.01, eff=0.6,pmort=0.4, K=2000,
+# stability averages
+stable_avg <- results_df |> 
+  filter(stable == "stable") |> 
+  group_by(stable) |> 
+  summarize(hunt = max(hunt),
+            min_pred = min(min_pred))
 
-A key challenge is how you might want to define stability? Its up to you but you will need to write a sentence to explain why you chose the measure that you did.  It could be something as simple as maintaining a population above some value 50 years into the future.
+```
 
-Submit the Rmarkdown that documents your exploration (e.g how you tested different hunting levels and how you defined a stability metric). At the end of your Rmarkdown present a recommendation for sustainable hunting and 1-2 sentences to justify your recommendation based on your analysis. 
+### Discussion
+Based on my metric of stability such that predators need to be at least 1/3 of the prey population for the population to be stable, I have found that in order to keep the population stable there is a maximum hunting rate of about 0.57 with a minimum population of predators at 1135 units of predators.
+
+I would suggest that hunting limits and policies ensure that hunt rates do not exceed this maximum and that the minimum population does not dip below the minimum for a stable population of predators and prey.
 
