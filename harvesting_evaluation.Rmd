@@ -1,0 +1,117 @@
+---
+title: 'Assignment 7: Stability'
+author: "Colleen McCamy"
+date: "2023-06-04"
+output: html_document
+---
+
+```{r}
+
+# loading libraries
+library(tidyverse)
+library(sensitivity)
+library(tidyverse)
+library(deSolve)
+library(ggpubr)
+
+```
+
+
+```{r}
+
+# sourcing in the function
+path = "/Users/colleenmccamy/Documents/MEDS/classes/spring/eds-230-modeling/assignments/eds230-stability-modeling"
+source(paste0(path, "/R/lotvmodK_hunt.R"))
+
+```
+
+```{r}
+
+# setting parameters
+rprey <- 0.95
+alpha <- 0.01
+eff <- 0.6
+pmort <- 0.4
+K <- 2000
+pred_min <- 1000
+hunt <- 0.5
+
+# creating it to be a dataframe
+pars = tibble(rprey=rprey, alpha=alpha, eff=eff, pmort=pmort, K=K, prey_min = prey_min, hunt = hunt)
+
+# setting timescale
+months = seq(from=1, to=300, by  = 1)
+
+
+# establishing population at time 0
+pop0 <- c(prey=2000, pred=200)
+
+# integrating the model
+res <- ode(func=lotvmodK_hunt, y=pop, times=months, parms=pars)
+
+### --------------------- 
+### sensitivity analysis 
+### ---------------------
+
+# sample 1
+hunt_range <- runif(min = 0.01, max = 0.7, n = 200)
+min_range <- runif(min = 1, max = 2000, n = 200)
+X1 <-cbind.data.frame(hunt_range=hunt_range, min_range=min_range)
+
+# sample 2
+hunt_range <- runif(min = 0.01, max = 0.7, n = 200)
+min_range <- runif(min = 1, max = 2000, n = 200)
+X2 <-cbind.data.frame(hunt_range=hunt_range, min_range=min_range)
+
+# creating sobol object
+sensitivity_object <- sobolSalt(model = NULL,X1, X2, nboot = 300)
+
+# selecting random values to test
+values <- as.data.frame(sensitivity_object$X) |> 
+  sample_n(20, replace = FALSE)
+# Add column names
+colnames(values) <- c("hunt", "min_pred")
+
+# creating results shell
+results <- list()
+
+# iterating over the 20 random rows of the hunting and minimum pred values
+for (i in 1:nrow(values)) {
+
+  hunt <- values$hunt[i]
+  pred_min <- values$min_pred[i]
+
+
+  pars <- tibble(
+    rprey = rprey,
+    alpha = alpha,
+    eff = eff,
+    pmort = pmort,
+    K = K,
+    pred_min = pred_min,
+    hunt = hunt
+  )
+
+
+  res <- ode(func = lotvmodK_hunt, y = pop0, times = months, parms = pars)
+
+
+  key <- paste0("hunt_", hunt, "_preymin_", prey_min)
+  results[[key]] <- as.data.frame(res)
+}
+
+# storing the results as a dataframe
+results_df <- do.call(rbind, results)
+
+```
+
+
+
+Explore how different hunting levels and different minimum prey populations (before hunting is allowed) are likely to effect the stability of the populations of both predator and prey. Use this exploration to recommend a hunting target that will be sustainable (e.g leave you with a stable prey and predator population)
+
+You can assume the following rprey=0.95, alpha=0.01, eff=0.6,pmort=0.4, K=2000,
+
+A key challenge is how you might want to define stability? Its up to you but you will need to write a sentence to explain why you chose the measure that you did.  It could be something as simple as maintaining a population above some value 50 years into the future.
+
+Submit the Rmarkdown that documents your exploration (e.g how you tested different hunting levels and how you defined a stability metric). At the end of your Rmarkdown present a recommendation for sustainable hunting and 1-2 sentences to justify your recommendation based on your analysis. 
+
